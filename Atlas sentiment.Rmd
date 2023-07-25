@@ -1,0 +1,150 @@
+---
+title: "Topic-Modeling-and-Sentiment-Analysis"
+author: "Vuk Dinić"
+date: "2023-03-12"
+output: html_document
+---
+
+```{r}
+library(tm)
+library(pdftools)
+library(textstem)
+library(syuzhet)
+library(qdap)
+library(ggplot2)
+library(topicmodels)
+```
+
+
+
+```{r}
+### PREPARATION ###
+
+atlas <- pdf_text("D:/01 ARCE PROJECTS/ATLAS/atlas.pdf")
+
+atlas_corpus <- VCorpus(VectorSource(atlas))
+
+atlas_corpus <- tm_map(atlas_corpus, removePunctuation)
+atlas_corpus <- tm_map(atlas_corpus, content_transformer(tolower))
+atlas_corpus <- tm_map(atlas_corpus, removeNumbers)
+atlas_corpus <- tm_map(atlas_corpus, removeWords, stopwords("english"))
+atlas_corpus <- tm_map(atlas_corpus, stemDocument, language = "english")
+
+term_count <- freq_terms(atlas_corpus, 50)
+
+term_count
+
+custom_stop <- c()
+
+atlas_corpus_refined <- tm_map(atlas_corpus, removeWords, custom_stop)
+
+term_count_clean <- freq_terms(atlas_corpus_refined, 20)
+
+term_count_clean
+
+term50 <- subset(term_count_clean, FREQ > 50)
+```
+
+## Including Plots
+
+You can also embed plots, for example:
+
+```{r}
+### PLOT ###
+
+ggplot(term50, aes(x = reorder(WORD, -FREQ), y = FREQ, fill = FREQ)) + 
+  
+  geom_bar(stat = "identity", color = "black") +
+  
+  scale_fill_gradient(low = "blue", high = "yellow", na.value = "black") +
+  
+  labs(title = "Top words from the book Atlas Shrugged", x = "Words", y = "Frequency") +
+  
+  theme_minimal() +
+  
+  theme(axis.text.x = element_text(angle = 90, hjust = 1),
+        legend.position = "none")
+```
+
+
+```{r}
+### DTM ###
+
+atlas_tdm <- DocumentTermMatrix(atlas_corpus)
+```
+
+```{r}
+### TOPIC MODELING ###
+
+dtm <- removeSparseTerms(atlas_tdm, 0.95)
+
+
+# Filter out documents with no terms
+
+atlas_tdm <- atlas_tdm[apply(atlas_tdm, 1, sum) > 0, ]
+
+
+# Filter out low frequency terms
+
+freq_terms <- findFreqTerms(atlas_tdm, lowfreq = 5)
+
+atlas_tdm <- atlas_tdm[, freq_terms]
+
+
+# Fit LDA model with 5 topics
+
+lda_model <- LDA(atlas_tdm, k = 5)
+
+
+# Get top 10 terms for each topic
+
+top_terms <- terms(lda_model, 10)
+
+top_terms
+```
+
+```{r}
+### SENTIMENT ANALYSIS ###
+
+atlas <- pdf_text("D:/01 ARCE PROJECTS/ATLAS/atlas.pdf")
+
+atlas <- paste(atlas, collapse = " ")
+
+atlas_value <- get_nrc_sentiment(atlas)
+
+atlas_value[1:100, 1:10]
+
+score <- colSums(atlas_value[,])
+
+score_df <- data.frame(score)
+
+score_df
+
+atlas_score <- cbind(sentiment = row.names(score_df),
+                              score_df, row.names= NULL)
+
+print(atlas_score)
+
+
+# Plot a bar chart with the sentiment scores
+
+sentiment_colors <- c("positive" = "#1b9e77", "negative" = "#d95f02", "neutral" = "#7570b3")
+
+ggplot(data = atlas_score, aes(x = sentiment, y = score, fill = sentiment)) +
+  
+  geom_bar(stat = "identity", width = 0.9, color = "black") +
+  
+  scale_fill_manual(values = sentiment_colors) +
+  
+  theme(axis.text.x = element_text(angle = 90, hjust = 1)) +
+  
+  geom_text(aes(label = score), size = 4, position = position_stack(vjust = 0.5)) +
+  
+  labs(title = "Sentiment Analysis of Atlas Shrugged", 
+       x = "Sentiment", y = "Score") +
+  
+  theme(plot.title = element_text(hjust = 0.5, size = 14), 
+        axis.title = element_text(size = 15),
+        axis.text = element_text(size = 12),
+        legend.position = "none")
+```
